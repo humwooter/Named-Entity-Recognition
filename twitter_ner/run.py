@@ -64,8 +64,12 @@ def word2features(sentence, i, postags):
         'word.has_number': any(char.isdigit() for char in word),
         'word.prefix2': word[:2],
         'word.prefix3': word[:3],
+        'word.prefix4': word[:4],
+
         'word.suffix2': word[-2:],
         'word.suffix3': word[-3:],
+        'word.suffix4': word[-4:],
+
         'word.capitalized': word.istitle(),
         'word.all_caps': word.isupper(),
         'word.first_char_is_num': word[0].isdigit(),
@@ -168,9 +172,14 @@ df_test = pd.DataFrame(results)
 
 df_test.to_csv('test_ans.csv', index=False)
 
-y_valid_pred = crf.predict(X_valid)
-accuracy = metrics.flat_accuracy_score(y_valid, y_valid_pred)
-print('Validation accuracy:', accuracy)
+# print report for all labels except 8
+labels = list(crf.classes_)
+print(metrics.flat_f1_score(y_valid, y_val_pred, average='weighted', labels=labels))
+labels.remove('20')
+print(metrics.flat_f1_score(y_valid, y_val_pred, average='weighted', labels=labels))
+# y_valid_pred = crf.predict(X_valid)
+# accuracy = metrics.flat_accuracy_score(y_valid, y_valid_pred)
+# print('Validation accuracy:', accuracy)
 
 
 
