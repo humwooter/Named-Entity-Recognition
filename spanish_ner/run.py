@@ -37,34 +37,22 @@ def load_data(filename):
     return sentences
 
 
-# def load_data(filename):
-#     df = pd.read_csv(filename)
-
-#     sentences, sentence = [], []
-#     last_id = -1
-#     for index, row in df.iterrows():
-#         if row['id'] < last_id:
-#             sentences.append(sentence)
-#             sentence = []
-        
-#         if 'label' in df.columns:
-#             sentence.append((row['id'], row['word'], row['label']))
-#         else:
-#             sentence.append((row['id'], row['word']))
-        
-#         last_id = row['id']
-    
-#     if sentence:
-#         sentences.append(sentence)
-
-#     return sentences
-
 def has_accent(word):
     accents = set('áéíóúüñÁÉÍÓÚÜÑ')
     if any(char in accents for char in word):
         return True
     else:
         return False
+
+def accent_positions(word):
+    accents = set('áéíóúüñÁÉÍÓÚÜÑ')
+    result = ''
+    for char in word:
+        if char in accents:
+            result += char
+        else:
+            result += '_'
+    return result
 
 
 def shape(word):
@@ -100,7 +88,6 @@ def word2features(sentence, i, wv=None):
     features = {
         'bias': 1.0,
         'word.full':word,
-        'word.lower()': word.lower(),
         'word.isupper()': word.isupper(),
         'word.istitle()': word.istitle(),
         'word.isdigit()': word.isdigit(),
@@ -115,10 +102,10 @@ def word2features(sentence, i, wv=None):
         'word.suffix4': word[-4:],
         'word.suffix5': word[-5:],
         
+        'word.accent_positions': accent_positions(word),
         'word.capitalized': word.istitle(),
         'word.all_caps': word.isupper(),
         'word.is_lower': word.islower(),
-        # 'word.shape': shape(word),
         'word.accent':has_accent(word),
         'word.keyword_score()': keyword_score(word),  # New feature to check for keywords
         'word.has_hyphen': '-' in word,
@@ -136,11 +123,12 @@ def word2features(sentence, i, wv=None):
                 '-1:word.is_de()': True,
             })
         features.update({
-            '-1:word.lower()': word1.lower(),
+            '-1:word.full':word1,
             '-1:word.istitle()': word1.istitle(),
             '-1:word.isupper()': word1.isupper(),
             '-1:word.keyword_score()': keyword_score(word1),
             '-1:word.accent':has_accent(word1),
+            '-1:word.accent_positions': accent_positions(word1),
 
             '-1:word.prefix2': word1[:2],
             '-1:word.prefix3': word1[:3],
@@ -160,11 +148,12 @@ def word2features(sentence, i, wv=None):
         word1 = sentence[i+1][1]
         pos_tag_word1 = tagger.tag([word1])[0][1]
         features.update({
-            '+1:word.lower()': word1.lower(),
+            '+1:word.full':word1,
             '+1:word.istitle()': word1.istitle(),
             '+1:word.isupper()': word1.isupper(),
             '+1:word.keyword_score()': keyword_score(word1),
             '+1:word.accent':has_accent(word1),
+            '+1:word.accent_positions': accent_positions(word1),
 
             '+1:word.prefix2': word1[:2],
             '+1:word.prefix3': word1[:3],
@@ -183,12 +172,13 @@ def word2features(sentence, i, wv=None):
         word2 = sentence[i-2][1]
         pos_tag_word2 = tagger.tag([word2])[0][1]
         features.update({
-            '-2:word.lower()': word2.lower(),
+            '-2:word.full':word2,
             '-2:word.istitle()': word2.istitle(),
             '-2:word.isupper()': word2.isupper(),
             '-2:word.keyword_score()': keyword_score(word2),
             '-2:word.pos_tag': pos_tag_word2 if pos_tag_word2 else 'none',
             '-2:word.accent':has_accent(word2),
+            '-2:word.accent_positions': accent_positions(word2),
 
             '-2:word.prefix2': word2[:2],
             '-2:word.prefix3': word2[:3],
@@ -204,12 +194,14 @@ def word2features(sentence, i, wv=None):
         word2 = sentence[i+2][1]
         pos_tag_word2 = tagger.tag([word2])[0][1]
         features.update({
-            '+2:word.lower()': word2.lower(),
             '+2:word.istitle()': word2.istitle(),
             '+2:word.isupper()': word2.isupper(),
+            '+2:word.full':word2,
+
             '+2:word.keyword_score()': keyword_score(word2),
             '+2:word.pos_tag': pos_tag_word2 if pos_tag_word2 else 'none',
             '+2:word.accent':has_accent(word2),
+            '+2:word.accent_positions': accent_positions(word2),
 
             '+2:word.prefix2': word2[:2],
             '+2:word.prefix3': word2[:3],
@@ -257,7 +249,7 @@ X_test = [sentence2features(s, wv) for s in test_sents]
 
 crf = sklearn_crfsuite.CRF(
     algorithm='lbfgs',
-    c1=0.1,
+    c1=0.08,
     c2=0.1,
     max_iterations=120,
     all_possible_transitions=True
