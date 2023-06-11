@@ -1,5 +1,6 @@
 import sklearn_crfsuite
 import nltk
+from nltk.corpus import cess_esp
 from sklearn.model_selection import cross_val_score
 from sklearn_crfsuite import metrics
 from gensim.models import Word2Vec
@@ -7,28 +8,56 @@ import pandas as pd
 import numpy as np
 
 np.random.seed(0)
+nltk.download('cess_esp')
+
+
+# Train POS tagger
+tagger = nltk.UnigramTagger(cess_esp.tagged_sents())
 
 def load_data(filename):
     df = pd.read_csv(filename)
-
-    sentences, sentence = [], []
-    last_id = -1
-    for index, row in df.iterrows():
-        if row['id'] < last_id:
-            sentences.append(sentence)
-            sentence = []
-        
-        if 'label' in df.columns:
-            sentence.append((row['id'], row['word'], row['label']))
-        else:
-            sentence.append((row['id'], row['word']))
-        
-        last_id = row['id']
+    sentences, sentence = [], []    
     
+    for index, row in df.iterrows():
+        if pd.isnull(row).all():  # This checks if all columns in the row are NaN, indicating a blank line.
+            print(row)
+            if sentence:  # Only append non-empty sentences.
+                sentences.append(sentence)
+                sentence = []
+        else:
+            if 'label' in df.columns:
+                sentence.append((row['id'], row['word'], row['label']))
+            else:
+                sentence.append((row['id'], row['word']))
+    
+    # After the loop, append the last sentence if it's non-empty.
     if sentence:
         sentences.append(sentence)
 
     return sentences
+
+
+# def load_data(filename):
+#     df = pd.read_csv(filename)
+
+#     sentences, sentence = [], []
+#     last_id = -1
+#     for index, row in df.iterrows():
+#         if row['id'] < last_id:
+#             sentences.append(sentence)
+#             sentence = []
+        
+#         if 'label' in df.columns:
+#             sentence.append((row['id'], row['word'], row['label']))
+#         else:
+#             sentence.append((row['id'], row['word']))
+        
+#         last_id = row['id']
+    
+#     if sentence:
+#         sentences.append(sentence)
+
+#     return sentences
 
 def has_accent(word):
     accents = set('áéíóúüñÁÉÍÓÚÜÑ')
@@ -61,7 +90,12 @@ def keyword_score(word):
     return has_keyword + is_title + is_upper
 
 def word2features(sentence, i, wv=None):
+    # print(i)
     word = sentence[i][1]
+    pos_tag_word = tagger.tag([word])[0][1]
+    if (pos_tag_word == None):
+        pos_tag_word = "none"
+    # print(pos_tag_word)
 
     features = {
         'bias': 1.0,
@@ -70,23 +104,33 @@ def word2features(sentence, i, wv=None):
         'word.isupper()': word.isupper(),
         'word.istitle()': word.istitle(),
         'word.isdigit()': word.isdigit(),
-        'word.has_number()': any(char.isdigit() for char in word),
+        # 'word.has_number()': any(char.isdigit() for char in word),
         'word.prefix2': word[:2],
         'word.prefix3': word[:3],
+        'word.prefix4': word[:4],
+        'word.prefix5': word[:5],
+
         'word.suffix2': word[-2:],
         'word.suffix3': word[-3:],
+        'word.suffix4': word[-4:],
+        'word.suffix5': word[-5:],
+        
         'word.capitalized': word.istitle(),
         'word.all_caps': word.isupper(),
-        'word.all_lower': word.islower(),
+        'word.is_lower': word.islower(),
         # 'word.shape': shape(word),
         'word.accent':has_accent(word),
-        'word.keyword_score()': keyword_score(word)  # New feature to check for keywords
+        'word.keyword_score()': keyword_score(word),  # New feature to check for keywords
+        'word.has_hyphen': '-' in word,
+        'word.has_capital': any(char.isupper() for char in word),
+        'word.pos_tag': pos_tag_word,
     }    
 
     
 
     if i > 0:
         word1 = sentence[i-1][1]
+        pos_tag_word1 = tagger.tag([word1])[0][1]
         if word1.lower() == "de":
             features.update({
                 '-1:word.is_de()': True,
@@ -96,20 +140,86 @@ def word2features(sentence, i, wv=None):
             '-1:word.istitle()': word1.istitle(),
             '-1:word.isupper()': word1.isupper(),
             '-1:word.keyword_score()': keyword_score(word1),
+            '-1:word.accent':has_accent(word1),
+
+            '-1:word.prefix2': word1[:2],
+            '-1:word.prefix3': word1[:3],
+            '-1:word.prefix4': word1[:4],
+            '-1:word.prefix5': word1[:5],
+            '-1:word.suffix2': word1[-2:],
+            '-1:word.suffix3': word1[-3:],
+            '-1:word.suffix4': word1[-4:],
+            '-1:word.suffix5': word1[-5:],
+
+            '-1:word.pos_tag': pos_tag_word1 if pos_tag_word1 else 'none',
         })
     else:
         features['BOS'] = True
 
     if i < len(sentence)-1:
         word1 = sentence[i+1][1]
+        pos_tag_word1 = tagger.tag([word1])[0][1]
         features.update({
             '+1:word.lower()': word1.lower(),
             '+1:word.istitle()': word1.istitle(),
             '+1:word.isupper()': word1.isupper(),
             '+1:word.keyword_score()': keyword_score(word1),
+            '+1:word.accent':has_accent(word1),
+
+            '+1:word.prefix2': word1[:2],
+            '+1:word.prefix3': word1[:3],
+            '+1:word.prefix4': word1[:4],
+            '+1:word.prefix5': word1[:5],
+            '+1:word.suffix2': word1[-2:],
+            '+1:word.suffix3': word1[-3:],
+            '+1:word.suffix4': word1[-4:],
+            '+1:word.suffix5': word1[-5:],
+
+            '+1:word.pos_tag': pos_tag_word1 if pos_tag_word1 else 'none',
         })
     else:
         features['EOS'] = True
+    if i > 1: # look 2 words back
+        word2 = sentence[i-2][1]
+        pos_tag_word2 = tagger.tag([word2])[0][1]
+        features.update({
+            '-2:word.lower()': word2.lower(),
+            '-2:word.istitle()': word2.istitle(),
+            '-2:word.isupper()': word2.isupper(),
+            '-2:word.keyword_score()': keyword_score(word2),
+            '-2:word.pos_tag': pos_tag_word2 if pos_tag_word2 else 'none',
+            '-2:word.accent':has_accent(word2),
+
+            '-2:word.prefix2': word2[:2],
+            '-2:word.prefix3': word2[:3],
+            '-2:word.prefix4': word2[:4],
+            '-2:word.prefix5': word2[:5],
+            '-2:word.suffix2': word2[-2:],
+            '-2:word.suffix3': word2[-3:],
+            '-2:word.suffix4': word2[-4:],
+            '-2:word.suffix5': word2[-5:],
+        })
+
+    if i < len(sentence) - 2: # look 2 words ahead
+        word2 = sentence[i+2][1]
+        pos_tag_word2 = tagger.tag([word2])[0][1]
+        features.update({
+            '+2:word.lower()': word2.lower(),
+            '+2:word.istitle()': word2.istitle(),
+            '+2:word.isupper()': word2.isupper(),
+            '+2:word.keyword_score()': keyword_score(word2),
+            '+2:word.pos_tag': pos_tag_word2 if pos_tag_word2 else 'none',
+            '+2:word.accent':has_accent(word2),
+
+            '+2:word.prefix2': word2[:2],
+            '+2:word.prefix3': word2[:3],
+            '+2:word.prefix4': word2[:4],
+            '+2:word.prefix5': word2[:5],
+            '+2:word.suffix2': word2[-2:],
+            '+2:word.suffix3': word2[-3:],
+            '+2:word.suffix4': word2[-4:],
+            '+2:word.suffix5': word2[-5:],
+        })
 
     return features
 
@@ -126,7 +236,8 @@ train_sents = load_data('train.csv')
 valid_sents = load_data('validation.csv')
 test_sents = load_data('test_noans.csv')
 
-# print(test_sents)
+print(len(test_sents))
+print(len(test_sents[0]))
 
 train_sentences = [[word for id, word, label in sentence] for sentence in train_sents]
 
@@ -148,7 +259,7 @@ crf = sklearn_crfsuite.CRF(
     algorithm='lbfgs',
     c1=0.1,
     c2=0.1,
-    max_iterations=100,
+    max_iterations=120,
     all_possible_transitions=True
 )
 crf.fit(X_train, y_train)
