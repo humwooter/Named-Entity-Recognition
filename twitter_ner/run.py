@@ -182,6 +182,7 @@ def word2features(sentence, i):
             
             '-1:words.is_city()': is_city(words),
             '-1:words.is_us_state()': is_us_state(words),
+            # '-1:words.shape': get_word_shape(words),
 
             # '-1:word.prefix1': word1[:1],
             '-1:word.prefix2': word1[:2],
@@ -216,6 +217,7 @@ def word2features(sentence, i):
             
             '-2:words.is_city()': is_city(words),
             '-2:words.is_us_state()': is_us_state(words),
+            # '-2:words.shape': get_word_shape(words),
 
             # '-2:word.prefix1': word2[:1],
             '-2:word.prefix2': word2[:2],
@@ -252,6 +254,7 @@ def word2features(sentence, i):
 
             '+1:words.is_city()': is_city(words),
             '+1:words.is_us_state()': is_us_state(words),
+            # '+1:words.shape': get_word_shape(words),
 
             # '+1:word.prefix1': word1[:1],
             '+1:word.prefix2': word1[:2],
@@ -311,7 +314,7 @@ X_test = [sentence2features(s) for s in test_sents]
 
 crf = sklearn_crfsuite.CRF(
     algorithm='lbfgs',
-    c1=0.1,
+    c1=0.08,
     c2=0.1,
     max_iterations=100,
     all_possible_transitions=True
