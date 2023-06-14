@@ -1,49 +1,134 @@
 
 import sklearn_crfsuite
-import nltk
+import pycountry
+from nltk.corpus import treebank
 from sklearn.model_selection import cross_val_score
 from sklearn_crfsuite import metrics
-from gensim.models import Word2Vec
 import pandas as pd
 import numpy as np
+from nltk.corpus import stopwords
+from nltk.corpus import names
+import geonamescache
+import nltk
+import csv
+import sys
 
-np.random.seed(0)
+np.random.seed(42)
+
+test_file = str(sys.argv[1])
+prediction_file = str(sys.argv[2])
+
+country_words = {}
+
+for country in pycountry.countries:
+    country_name = country.name.lower()
+    words = country_name.split()
+    country_words[country_name] = words
+
+gc = geonamescache.GeonamesCache()
+cities = gc.get_cities()
+us_states = gc.get_us_states()
+
+
+city_names = [city['name'].lower() for city in cities.values()]
+us_states_names = [state['name'].lower() for state in us_states.values()]
+
+#used for testing
+def save_non_20_misclassificatins(crf_model, train_sentences, train_labels, train_features, valid_sentences, valid_labels, valid_features, file_name='non_20.csv'):
+    def append_non_20_instances(sentences, labels, predictions, is_training, is_validation):
+        non_20_instances = []
+        for sentence, label_seq, prediction_seq in zip(sentences, labels, predictions):
+            for (id, word, type, label), predicted_label in zip(sentence, prediction_seq):
+                if label != '20' and predicted_label != label:
+                    non_20_instances.append([word, predicted_label, label, is_training, is_validation])
+        return non_20_instances
+
+    y_train_pred = crf_model.predict(train_features)
+    y_valid_pred = crf_model.predict(valid_features)
+
+    non_20_instances = append_non_20_instances(train_sentences, train_labels, y_train_pred, True, False)
+    non_20_instances.extend(append_non_20_instances(valid_sentences, valid_labels, y_valid_pred, False, True))
+
+    with open(file_name, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(["Word", "Predicted label", "Actual label", "isTrainingData", "isValidationData"])  # Write the header
+        writer.writerows(non_20_instances)  # Write the instances
+
+
+def flatten(X):
+    flattened = []
+    for sentence in X:
+        word = sentence[0]
+        flattened+= [word]
+    return flattened
 
 def load_data(filename):
-    df = pd.read_csv(filename)
-
     sentences, sentence = [], []
-    last_id = -1
-    for index, row in df.iterrows():
-        if row['id'] < last_id:
-            sentences.append(sentence)
-            sentence = []
-        
-        if 'label' in df.columns:
-            sentence.append((row['id'], row['word'], row['label']))
-        else:
-            sentence.append((row['id'], row['word']))
-        
-        last_id = row['id']
-    
+    with open(filename, 'r') as file:
+        reader = csv.reader(file)
+        next(reader)  
+        for row in reader:
+            if row:  
+                if len(row) == 4:
+                    id, word, type, label = row
+                    sentence.append((id, word, type, label))
+                else:  
+                    id, word = row
+                    sentence.append((id, word))
+            else:  
+                sentences.append(sentence)
+                sentence = []
+
     if sentence:
         sentences.append(sentence)
 
     return sentences
 
-def shape(word):
-    if word.isdigit():
-        return 'numeric'
-    elif word.islower():
-        return 'all_lower'
-    elif word.isupper():
-        return 'all_upper'
-    elif word.istitle():
-        return 'init_cap'
-    else:
-        return 'mixed_cap'
 
-def word2features(sentence, i, postags):
+def get_word_shape(word):
+    shape = ""
+    for char in word:
+        if char == '#':
+            shape += '#'
+        if char.isupper():
+            shape += 'X'
+        elif char.islower():
+            shape += 'x'
+        elif char.isdigit():
+            shape += 'd'
+        else:
+            shape += char
+    return shape
+
+
+def is_country(word):
+    dont_match = ["the", "of", "in", "and", "see"]
+    if word.lower() in country_words and word.lower() not in dont_match:
+        return country_words.get(word.lower())
+    else:
+        return "not country"
+
+def is_city(word):
+    word = word.lower()
+    if word in city_names:
+        return True
+    return False
+
+def is_us_state(word):
+    word = word.lower()
+    if word in us_states_names:
+        return True
+    return False
+
+def is_name(word):
+    ambiguous_names = ["will", "rose", "way", "wait", "love", "wake", "teddy", "town", "say", "see"]
+    word = word.lower()
+    if word in all_names and word not in ambiguous_names:
+        return True
+    return False
+
+
+def word2features(sentence, i):
     word = sentence[i][1]
 
     features = {
@@ -53,7 +138,10 @@ def word2features(sentence, i, postags):
         'word.isupper()': word.isupper(),
         'word.istitle()': word.istitle(),
         'word.isdigit()': word.isdigit(),
-        'word.has_number': any(char.isdigit() for char in word),
+        'word.iscountry()': is_country(word),
+        'word.is_city()': is_city(word),
+        'word.is_us_state()': is_us_state(word),
+        
         'word.prefix2': word[:2],
         'word.prefix3': word[:3],
         'word.prefix4': word[:4],
@@ -65,82 +153,145 @@ def word2features(sentence, i, postags):
         'word.capitalized': word.istitle(),
         'word.all_caps': word.isupper(),
         'word.first_char_is_num': word[0].isdigit(),
+        'word.shape': get_word_shape(word),
+
+        'word.has_hashtag': word.startswith('#'),
         'word.has_hyphen': '-' in word,
         'word_has_period': '.' in word,
-        # 'word.all_lower': word.islower(),
-        'word.shape': shape(word),
-        'word.has_hashtag': word.startswith('#'),
+        'word_has_...': '...' in word,
         'word.has_at': word.startswith('@'),
         'word.has_url': 'http' in word or 'www.' in word,
-        # 'word.postag': postag
+        'word.has_number': any(char.isdigit() for char in word),
     }    
 
     if i > 0:
         word1 = sentence[i-1][1]
-        postag1 = postags[0][i-1][1]
+        words = word1 + " " + word
         features.update({
             '-1:word.lower()': word1.lower(),
+            '-1:words.lower()': words.lower(),
             '-1:word.istitle()': word1.istitle(),
-            '-1:word.isupper()': word1.isupper()
-            # '-1:word.postag': postag1
+            '-1:word.isupper()': word1.isupper(),
+            '-1:word.iscountry()': is_country(word1),
+            '-1:word.is_city()': is_city(word1),
+            '-1:word.is_us_state()': is_us_state(word1),
+            
+            '-1:words.is_city()': is_city(words),
+            '-1:words.is_us_state()': is_us_state(words),
+
+            '-1:word.prefix2': word1[:2],
+            '-1:word.prefix3': word1[:3],
+            '-1:word.prefix4': word1[:4],
+
+            '-1:word.suffix2': word1[-2:],
+            '-1:word.suffix3': word1[-3:],
+            '-1:word.suffix4': word1[-4:],
+            
+            '-1:word.has_hashtag': word1.startswith('#'),
+            '-1:word.has_hyphen': '-' in word1,
+            '-1:word_has_period': '.' in word1,
+            '-1:word_has_...': '...' in word1,
+            '-1:word.has_at': word1.startswith('@'),
+            '-1:word.has_url': 'http' in word1 or 'www.' in word1,
         })
-    else:
-        features['BOS'] = True
+    if i > 1:
+        word2 = sentence[i-2][1]
+        words = word2 + " " + sentence[i-1][1] + " " + word
+        features.update({
+            '-2:word.lower()': word2.lower(),
+            '-2:words.lower()': words.lower(),
+            '-2:word.istitle()': word2.istitle(),
+            '-2:word.isupper()': word2.isupper(),
+            '-2:word.iscountry()': is_country(word2),
+            '-2:word.is_city()': is_city(word2),
+            '-2:word.is_us_state()': is_us_state(word2),
+            
+            '-2:words.is_city()': is_city(words),
+            '-2:words.is_us_state()': is_us_state(words),
+
+            '-2:word.prefix2': word2[:2],
+            '-2:word.prefix3': word2[:3],
+            '-2:word.prefix4': word2[:4],
+
+            '-2:word.suffix2': word2[-2:],
+            '-2:word.suffix3': word2[-3:],
+            '-2:word.suffix4': word2[-4:],
+            
+            '-2:word.has_hashtag': word2.startswith('#'),
+            '-2:word.has_hyphen': '-' in word2,
+            '-2:word_has_period': '.' in word2,
+            '-2:word_has_...': '...' in word2,
+            '-2:word.has_at': word2.startswith('@'),
+            '-1:word.has_url': 'http' in word1 or 'www.' in word1,
+        })
+
 
     if i < len(sentence)-1:
         word1 = sentence[i+1][1]
-        postag1 = postags[0][i+1][1]
+        words = word + " " + word1
         features.update({
+            '+1:words.lower()': words.lower(),
             '+1:word.lower()': word1.lower(),
             '+1:word.istitle()': word1.istitle(),
             '+1:word.isupper()': word1.isupper(),
-            # '+1:word.postag': postag1
+            '+1:word.iscountry()': is_country(word1),
+            '+1:word.is_city()': is_city(word1),
+            '+1:word.is_us_state()': is_us_state(word1),
+
+            '+1:words.is_city()': is_city(words),
+            '+1:words.is_us_state()': is_us_state(words),
+
+            '+1:word.prefix2': word1[:2],
+            '+1:word.prefix3': word1[:3],
+            '+1:word.prefix4': word1[:4],
+
+            '+1:word.suffix2': word1[-2:],
+            '+1:word.suffix3': word1[-3:],
+            '+1:word.suffix4': word1[-4:],
+
+            '+1:word.has_hashtag': word1.startswith('#'),
+            '+1:word.has_hyphen': '-' in word1,
+            '+1:word_has_period': '.' in word1,
+            '+1:word_has_...': '...' in word1,
+            '+1:word.has_at': word1.startswith('@'),
+            '+1:word.has_url': 'http' in word1 or 'www.' in word1,
         })
-    else:
-        features['EOS'] = True
+
 
     return features
 
-def sentence2features(sentence, postags):
-    return [word2features(sentence, i, postags) for i in range(len(sentence))]
+def sentence2features(sentence):
+    return [word2features(sentence, i) for i in range(len(sentence))]
 
 def sentence2labels(sentence):
-    return [str(label) for id, word, label in sentence]
+    result = []
+    for input in sentence:
+        label = str(input[3])
+        result += [str(label)]
+    return result
 
 def sentence2tokens(sentence):
-    return [word for id, word, label in sentence]
+    result = []
+    for input in sentence:
+        word = input[1]
+        result += [word]
+    return result
 
 train_sents = load_data('train.csv')
 valid_sents = load_data('validation.csv')
-test_sents = load_data('test_noans.csv')
+test_sents = load_data(test_file)
 
-# print("train_sent: ", train_sents)
+# shuffle training data
+np.random.shuffle(train_sents)
 
-train_sentences = [[word for id, word, label in sentence] for sentence in train_sents]
-val_sentences = [[word for id, word, label in sentence] for sentence in valid_sents]
-test_sentences = [[word for id, word in sentence] for sentence in test_sents]
-
-train_postags = [nltk.pos_tag(sentence) for sentence in train_sentences]
-val_postags = [nltk.pos_tag(sentence) for sentence in val_sentences]
-test_postags = [nltk.pos_tag(sentence) for sentence in test_sentences]
-
-print("num train postags: ", len(train_postags[0]))
-print("num val postags: ", len(val_sentences[0]))
-print("num test postags: ", len(test_postags[0]))
-
-# w2v_model = Word2Vec(train_sentences, vector_size=100, window=5, min_count=1, workers=4)
-# w2v_model.save("word2vec.model")
-
-# wv = w2v_model.wv
-
-X_train = [sentence2features(s,train_postags) for s in train_sents]
+X_train = [sentence2features(s) for s in train_sents]
 y_train = [sentence2labels(s) for s in train_sents]
 
 
-X_valid = [sentence2features(s,val_postags) for s in valid_sents]
+X_valid = [sentence2features(s) for s in valid_sents]
 y_valid = [sentence2labels(s) for s in valid_sents]
 
-X_test = [sentence2features(s, test_postags) for s in test_sents]
+X_test = [sentence2features(s) for s in test_sents]
 
 crf = sklearn_crfsuite.CRF(
     algorithm='lbfgs',
@@ -149,6 +300,7 @@ crf = sklearn_crfsuite.CRF(
     max_iterations=100,
     all_possible_transitions=True
 )
+
 crf.fit(X_train, y_train)
 
 y_val_pred = crf.predict(X_valid)
@@ -162,13 +314,15 @@ for sent, pred in zip(test_sents, y_test_pred):
 
 df_test = pd.DataFrame(results)
 
-df_test.to_csv('test_ans.csv', index=False)
+df_test.to_csv(prediction_file, index=False)
 
-# print report for all labels except 8
+y_valid_pred = crf.predict(X_valid)
+
+
 labels = list(crf.classes_)
-print(metrics.flat_f1_score(y_valid, y_val_pred, average='weighted', labels=labels))
+print(metrics.flat_f1_score(y_valid, y_val_pred, average='weighted', labels=labels, zero_division=1))
 labels.remove('20')
-print(metrics.flat_f1_score(y_valid, y_val_pred, average='weighted', labels=labels))
-# y_valid_pred = crf.predict(X_valid)
-# accuracy = metrics.flat_accuracy_score(y_valid, y_valid_pred)
-# print('Validation accuracy:', accuracy)
+print(metrics.flat_f1_score(y_valid, y_val_pred, average='weighted', labels=labels, zero_division=1))
+
+save_non_20_misclassificatins(crf, train_sents, y_train, X_train, valid_sents, y_valid, X_valid, 'non_20.csv')
+
