@@ -142,13 +142,17 @@ def word2features(sentence, i):
         'word.is_city()': is_city(word),
         'word.is_us_state()': is_us_state(word),
         
+        # 'word.prefix1': word[:1],
         'word.prefix2': word[:2],
         'word.prefix3': word[:3],
         'word.prefix4': word[:4],
+        'word.prefix5': word[:5],
 
+        # 'word.suffix1': word[-1:],
         'word.suffix2': word[-2:],
         'word.suffix3': word[-3:],
         'word.suffix4': word[-4:],
+        # 'word.suffix5': word[-5:],
 
         'word.capitalized': word.istitle(),
         'word.all_caps': word.isupper(),
@@ -179,10 +183,13 @@ def word2features(sentence, i):
             '-1:words.is_city()': is_city(words),
             '-1:words.is_us_state()': is_us_state(words),
 
+            # '-1:word.prefix1': word1[:1],
             '-1:word.prefix2': word1[:2],
             '-1:word.prefix3': word1[:3],
             '-1:word.prefix4': word1[:4],
+            '-1:word.prefix5': word1[:5],
 
+            # '-1:word.suffix1': word1[-1:],
             '-1:word.suffix2': word1[-2:],
             '-1:word.suffix3': word1[-3:],
             '-1:word.suffix4': word1[-4:],
@@ -209,10 +216,13 @@ def word2features(sentence, i):
             '-2:words.is_city()': is_city(words),
             '-2:words.is_us_state()': is_us_state(words),
 
+            # '-2:word.prefix1': word2[:1],
             '-2:word.prefix2': word2[:2],
             '-2:word.prefix3': word2[:3],
             '-2:word.prefix4': word2[:4],
+            '-2:word.prefix5': word2[:5],
 
+            # '-2:word.suffix1': word2[-1:],
             '-2:word.suffix2': word2[-2:],
             '-2:word.suffix3': word2[-3:],
             '-2:word.suffix4': word2[-4:],
@@ -241,10 +251,13 @@ def word2features(sentence, i):
             '+1:words.is_city()': is_city(words),
             '+1:words.is_us_state()': is_us_state(words),
 
+            # '+1:word.prefix1': word1[:1],
             '+1:word.prefix2': word1[:2],
             '+1:word.prefix3': word1[:3],
             '+1:word.prefix4': word1[:4],
+            '+1:word.prefix5': word1[:5],
 
+            # '+1:word.suffix1': word1[-1:],
             '+1:word.suffix2': word1[-2:],
             '+1:word.suffix3': word1[-3:],
             '+1:word.suffix4': word1[-4:],
