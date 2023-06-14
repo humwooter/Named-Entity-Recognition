@@ -88,6 +88,8 @@ def load_data(filename):
 def get_word_shape(word):
     shape = ""
     for char in word:
+        if char == '.':
+            shape += '.'
         if char == '#':
             shape += '#'
         if char.isupper():
@@ -154,15 +156,13 @@ def word2features(sentence, i):
         'word.suffix4': word[-4:],
         # 'word.suffix5': word[-5:],
 
-        'word.capitalized': word.istitle(),
-        'word.all_caps': word.isupper(),
         'word.first_char_is_num': word[0].isdigit(),
         'word.shape': get_word_shape(word),
 
         'word.has_hashtag': word.startswith('#'),
         'word.has_hyphen': '-' in word,
         'word_has_period': '.' in word,
-        'word_has_...': '...' in word,
+        # 'word_has_...': '...' in word,
         'word.has_at': word.startswith('@'),
         'word.has_url': 'http' in word or 'www.' in word,
         'word.has_number': any(char.isdigit() for char in word),
@@ -193,11 +193,12 @@ def word2features(sentence, i):
             '-1:word.suffix2': word1[-2:],
             '-1:word.suffix3': word1[-3:],
             '-1:word.suffix4': word1[-4:],
+            # '-1:word.suffix5': word1[-5:],
             
             '-1:word.has_hashtag': word1.startswith('#'),
             '-1:word.has_hyphen': '-' in word1,
             '-1:word_has_period': '.' in word1,
-            '-1:word_has_...': '...' in word1,
+            # '-1:word_has_...': '...' in word1,
             '-1:word.has_at': word1.startswith('@'),
             '-1:word.has_url': 'http' in word1 or 'www.' in word1,
         })
@@ -226,11 +227,12 @@ def word2features(sentence, i):
             '-2:word.suffix2': word2[-2:],
             '-2:word.suffix3': word2[-3:],
             '-2:word.suffix4': word2[-4:],
+            # '-2:word.suffix5': word2[-5:],
             
             '-2:word.has_hashtag': word2.startswith('#'),
             '-2:word.has_hyphen': '-' in word2,
             '-2:word_has_period': '.' in word2,
-            '-2:word_has_...': '...' in word2,
+            # '-2:word_has_...': '...' in word2,
             '-2:word.has_at': word2.startswith('@'),
             '-1:word.has_url': 'http' in word1 or 'www.' in word1,
         })
@@ -261,11 +263,12 @@ def word2features(sentence, i):
             '+1:word.suffix2': word1[-2:],
             '+1:word.suffix3': word1[-3:],
             '+1:word.suffix4': word1[-4:],
+            # '+1:word.suffix5': word1[-5:],
 
             '+1:word.has_hashtag': word1.startswith('#'),
             '+1:word.has_hyphen': '-' in word1,
             '+1:word_has_period': '.' in word1,
-            '+1:word_has_...': '...' in word1,
+            # '+1:word_has_...': '...' in word1,
             '+1:word.has_at': word1.startswith('@'),
             '+1:word.has_url': 'http' in word1 or 'www.' in word1,
         })
